@@ -51,7 +51,7 @@ def load_chromosome(in_f, fast=2):
                          no_warn=True)
         xpr.tads       = dico['experiments'][name]['tads']
         xpr.norm       = dico['experiments'][name]['wght']
-        xpr.hic_data   = dico['experiments'][name]['hi-c']
+        xpr.ccc_data   = dico['experiments'][name]['hi-c']
         xpr.conditions = dico['experiments'][name]['cond']
         xpr.size       = dico['experiments'][name]['size']
         try:
@@ -65,12 +65,12 @@ def load_chromosome(in_f, fast=2):
     crm._centromere     = dico['_centromere']
     if type(dico['experiments'][name]['hi-c']) == str or fast!= int(2):
         try:
-            dicp = load(open(in_f + '_hic'))
+            dicp = load(open(in_f + '_ccc'))
         except IOError:
             raise Exception('ERROR: file %s not found\n' % (
                 dico['experiments'][name]['hi-c']))
         for name in dico['experiments']:
-            crm.get_experiment(name).hic_data = dicp[name]['hi-c']
+            crm.get_experiment(name).ccc_data = dicp[name]['hi-c']
             if fast != 1:
                 crm.get_experiment(name).norm = dicp[name]['wght']
     elif not fast:
@@ -87,7 +87,7 @@ class Chromosome(object):
     :param name: name of the chromosome (might be a chromosome name for example)
     :param None resolutions: list of resolutions corresponding to a list of
        experiments passed.
-    :param None experiment_hic_data: :py:func:`list` of paths to files
+    :param None experiment_ccc_data: :py:func:`list` of paths to files
        containing the Hi-C count matrices corresponding to different experiments
     :param None experiment_tads: :py:func:`list` of paths to files
        containing the definition of TADs corresponding to different experiments
@@ -119,7 +119,7 @@ class Chromosome(object):
 
     """
     def __init__(self, name, experiment_resolutions=None, experiment_tads=None,
-                 experiment_hic_data=None, experiment_names=None,
+                 experiment_ccc_data=None, experiment_names=None,
                  max_tad_size=5000000, chr_len=0, parser=None,
                  centromere_search=False, silent=False):
         self.name             = name
@@ -138,12 +138,12 @@ class Chromosome(object):
                 name = experiment_names[i] if experiment_names else None
                 self.add_experiment(name, experiment_resolutions[i],
                                     tad_def=handler, parser=parser)
-        if experiment_hic_data:
-            for i, handler in enumerate(experiment_hic_data or []):
+        if experiment_ccc_data:
+            for i, handler in enumerate(experiment_ccc_data or []):
                 name = experiment_names[i] if experiment_names else None
                 try:
                     xpr = self.get_experiment(name)
-                    xpr.load_hic_data(handler, silent=silent)
+                    xpr.load_ccc_data(handler, silent=silent)
                     continue
                 except:
                     pass
@@ -152,7 +152,7 @@ class Chromosome(object):
                     self.experiments.append(handler)
                 else:
                     self.add_experiment(name, experiment_resolutions[i],
-                                        hic_data=handler, parser=parser)
+                                        ccc_data=handler, parser=parser)
 
 
     def _get_forbidden_region(self, xpr):
@@ -207,12 +207,12 @@ class Chromosome(object):
 
         :param out_f: path to the file where to store the :py:mod:`cPickle`
            object
-        :param True fast: if True, skip Hi-C data and weights
+        :param True fast: if True, skip 3C-like data (5C or Hi-C) and weights
         :param True divide: if True writes two pickles, one with what would
-           result by using the fast option, and the second with the Hi-C and 
-           weights data. The second file name will be extended by '_hic' (ie:
+           result by using the fast option, and the second with the 3C-like and 
+           weights data. The second file name will be extended by '_ccc' (ie:
            with out_f='chromosome12.pik' we would obtain chromosome12.pik and
-           chromosome12.pik_hic). When loaded :func:`load_chromosome` will
+           chromosome12.pik_ccc). When loaded :func:`load_chromosome` will
            automatically search for both files
         :param False force: overwrite the existing file
 
@@ -237,12 +237,12 @@ class Chromosome(object):
             if divide:
                 dicp[xpr.name] = {
                     'wght': xpr.norm,
-                    'hi-c': xpr.hic_data}
+                    'hi-c': xpr.ccc_data}
                 dico['experiments'][xpr.name]['wght'] = None
                 dico['experiments'][xpr.name]['hi-c'] = None
             else:
                 dico['experiments'][xpr.name]['wght'] = xpr.norm
-                dico['experiments'][xpr.name]['hi-c'] = xpr.hic_data
+                dico['experiments'][xpr.name]['hi-c'] = xpr.ccc_data
         dico['name']            = self.name
         dico['size']            = self.size
         dico['r_size']          = self.r_size
@@ -253,7 +253,7 @@ class Chromosome(object):
         dump(dico, out)
         out.close()
         if not fast:
-            out = open(out_f + '_hic', 'w')
+            out = open(out_f + '_ccc', 'w')
             dump(dicp, out)
             out.close()
 
@@ -321,16 +321,16 @@ class Chromosome(object):
 
 
     def add_experiment(self, name, resolution=None, tad_def=None,
-                       hic_data=None, replace=False, parser=None,
+                       ccc_data=None, replace=False, parser=None,
                        conditions=None, **kwargs):
         """
-        Add a Hi-C experiment to Chromosome
+        Add a 3C-like (5C or Hi-C) experiment to Chromosome
         
         :param name: name of the experiment or of the Experiment object
         :param resolution: resolution of the experiment (needed if name is not
            an Experiment object)
-        :param None hic_data: whether a file or a list of lists corresponding to
-           the Hi-C data
+        :param None ccc_data: whether a file or a list of lists corresponding to
+           the 3C-like data
         :param None tad_def: a file or a dict with precomputed TADs for this
            experiment
         :param False replace: overwrite the experiments loaded under the same
@@ -358,14 +358,14 @@ class Chromosome(object):
             warn('No name provided, random name generated: %s\n' % (name))
         if name in self.experiments:
             if 'hi-c' in self.get_experiment(name) and not replace:
-                warn('''Hi-C data already loaded under the name: %s.
+                warn('''3C-like data already loaded under the name: %s.
                 This experiment will be kept under %s.\n''' % (name,
                                                                name + '_'))
                 name += '_'
         if type(name) == Experiment:
             self.experiments.append(name)
         elif resolution:
-            self.experiments.append(Experiment(name, resolution, hic_data,
+            self.experiments.append(Experiment(name, resolution, ccc_data,
                                                tad_def, parser=parser,
                                                conditions=conditions, **kwargs))
         else:
@@ -378,7 +378,7 @@ class Chromosome(object):
         Call the :func:`pytadbit.tadbit.tadbit` function to calculate the
         position of Topologically Associated Domains
         
-        :param experiment: A square matrix of interaction counts of Hi-C
+        :param experiment: A square matrix of interaction counts of 3C-like
            data or a list of such matrices for replicated experiments. The
            counts must be evenly sampled and not normalized. 'experiment'
            can be either a list of lists, a path to a file or a file handler
@@ -410,7 +410,7 @@ class Chromosome(object):
                 if xpr.resolution != resolution:
                     raise Exception('All Experiments must have the same ' +
                                     'resolution\n')
-                matrix.append(xpr.hic_data[0])
+                matrix.append(xpr.ccc_data[0])
                 if name.startswith('batch'):
                     name += '_' + xpr.name
             result, weights = tadbit(matrix,
@@ -418,7 +418,7 @@ class Chromosome(object):
                                      max_tad_size=max_tad_size,
                                      no_heuristic=no_heuristic,
                                      get_weights=True)
-            experiment = Experiment(name, resolution, hic_data=matrix,
+            experiment = Experiment(name, resolution, ccc_data=matrix,
                                     tad_def=result, weights=weights)
             self.add_experiment(experiment)
             return
@@ -427,7 +427,7 @@ class Chromosome(object):
         for experiment in experiments:
             if not type(experiment) == Experiment:
                 experiment = self.get_experiment(experiment)
-            result, weights = tadbit(experiment.hic_data,
+            result, weights = tadbit(experiment.ccc_data,
                                      n_cpus=n_cpus, verbose=verbose,
                                      max_tad_size=max_tad_size,
                                      no_heuristic=no_heuristic,
@@ -439,7 +439,7 @@ class Chromosome(object):
 
     def __update_size(self, xpr):
         """
-        Update the chromosome size and relative size after loading new Hi-C
+        Update the chromosome size and relative size after loading new 3C-like
         experiments, unless the Chromosome size was defined by hand.
         
         """
@@ -455,7 +455,7 @@ class Chromosome(object):
                   show=True, logarithm=True, normalized=False, relative=True,
                   decorate=True):
         """
-        Visualize the matrix of Hi-C interactions.
+        Visualize the matrix of 3C-like (5C or Hi-C) interactions.
 
         :param name: name of the experiment to visualize
         :param None tad: a given TAD in the form:
@@ -480,7 +480,7 @@ class Chromosome(object):
         :param True normalized: show the normalized data (weights might have
            been calculated previously). *Note: white rows/columns may appear in
            the matrix displayed; these rows correspond to filtered rows (see*
-           :func:`pytadbit.utils.hic_filtering.hic_filtering_for_modelling` *)*
+           :func:`pytadbit.utils.ccc_filtering.ccc_filtering_for_modelling` *)*
         :param True relative: color scale is relative to the whole matrix of
            data, not only to the region displayed
         :param True decorate: draws color bar, title and axes labels
@@ -493,14 +493,14 @@ class Chromosome(object):
         size = xper.size
         if normalized and not xper.norm:
             raise Exception('ERROR: weights not calculated for this ' +
-                            'experiment. Run Experiment.normalize_hic\n')
+                            'experiment. Run Experiment.normalize_ccc\n')
         if tad and focus:
             raise Exception('ERROR: only one of "tad" or "focus" might be set')
         start = end = None
         if focus:
             start, end = focus
             if start == 0:
-                warn('Hi-C matrix starts at 1, setting starting point to 1.\n')
+                warn('3C-like matrix starts at 1, setting starting point to 1.\n')
                 start = 1
         elif type(tad) == dict:
             start = int(tad['start'])
@@ -511,10 +511,10 @@ class Chromosome(object):
                                    key=lambda x: int(x['start']))[0 ]['start'])
                 end   = int(sorted(tad,
                                    key=lambda x: int(x['end'  ]))[-1]['end'  ])
-        if len(xper.hic_data) > 1:
-            hic_data = [sum(i) for i in zip(*xper.hic_data)]
+        if len(xper.ccc_data) > 1:
+            ccc_data = [sum(i) for i in zip(*xper.ccc_data)]
         else:
-            hic_data = xper.hic_data[0]
+            ccc_data = xper.ccc_data[0]
         if relative:
             if normalized:
                 # find minimum, if value is non-zero... for logarithm
@@ -526,8 +526,8 @@ class Chromosome(object):
                 vmin = fun(vmin or (1 if logarithm else 0))
                 vmax = fun(max(xper.norm[0]))
             else:
-                vmin = fun(min(hic_data) or (1 if logarithm else 0))
-                vmax = fun(max(hic_data))
+                vmin = fun(min(ccc_data) or (1 if logarithm else 0))
+                vmax = fun(max(ccc_data))
         if not axe:
             plt.figure(figsize=(8, 6))
             axe = plt.subplot(111)
@@ -542,7 +542,7 @@ class Chromosome(object):
                         for j in xrange(start - 1, end)]
                 else:
                     matrix = [
-                        [hic_data[i+size*j]
+                        [ccc_data[i+size*j]
                          for i in xrange(start - 1, end)]
                         for j in xrange(start - 1, end)]
             elif type(tad) is list:
@@ -560,7 +560,7 @@ class Chromosome(object):
                            for i in xrange(size)]
                           for j in xrange(size)]
             else:
-                matrix = [[hic_data[i+size*j]\
+                matrix = [[ccc_data[i+size*j]\
                            for i in xrange(size)] \
                           for j in xrange(size)]
         if relative:
@@ -579,7 +579,7 @@ class Chromosome(object):
                                      int(start or 1) + len(matrix) - 0.5))
         if decorate:
             cbar = axe.figure.colorbar(img)
-            cbar.ax.set_ylabel('Log2 Hi-C interactions count')
+            cbar.ax.set_ylabel('Log2 3C-like interactions count')
             axe.set_title(('Chromosome %s experiment %s' +
                            ' %s') % (self.name, xper.name,
                                      'focus: %s-%s' % (start, end) if tad else ''))
@@ -631,15 +631,15 @@ class Chromosome(object):
             plt.show()
 
 
-    def get_tad_hic(self, tad, x_name, normed=True, matrix_num=0):
+    def get_tad_ccc(self, tad, x_name, normed=True, matrix_num=0):
         """
-        Retrieve the Hi-C data matrix corresponding to a given TAD.
+        Retrieve the 3C-like data matrix corresponding to a given TAD.
         
         :param tad: a given TAD (:py:class:`dict`)
         :param x_name: name of the experiment
-        :param True normed: if True, normalize the Hi-C data
+        :param True normed: if True, normalize the 3C-like data
         
-        :returns: Hi-C data matrix for the given TAD
+        :returns: 3C-like data matrix for the given TAD
         """
         beg, end = int(tad['start']), int(tad['end'])
         xpr = self.get_experiment(x_name)
@@ -650,7 +650,7 @@ class Chromosome(object):
             tadi = tadi * size
             for j, tadj in enumerate(xrange(beg, end)):
                 if normed:
-                    matrix[j][i] = xpr.hic_data[matrix_num][tadi + tadj]
+                    matrix[j][i] = xpr.ccc_data[matrix_num][tadi + tadj]
                 else:
                     matrix[j][i] = xpr.norm[0][tadi + tadj]
         return matrix
@@ -661,14 +661,14 @@ class Chromosome(object):
         Iterate over the TADs corresponding to the given experiment.
         
         :param x_name: name of the experiment
-        :param True normed: normalize Hi-C data returned
+        :param True normed: normalize 3C-like data returned
         
-        :yields: Hi-C data corresponding to each TAD
+        :yields: 3C-like data corresponding to each TAD
         """
-        if not self.get_experiment(x_name).hic_data:
-            raise Exception('No Hi-c data for %s experiment\n' % (x_name))
+        if not self.get_experiment(x_name).ccc_data:
+            raise Exception('No 3C-like data for %s experiment\n' % (x_name))
         for name, ref in self.get_experiment(x_name).tads.iteritems():
-            yield name, self.get_tad_hic(ref, x_name, normed=normed)
+            yield name, self.get_tad_ccc(ref, x_name, normed=normed)
 
 
     def set_max_tad_size(self, value):
@@ -693,26 +693,26 @@ class Chromosome(object):
         :class:`Chromosome` corresponds to a real chromosome.
         Add a boundary to all the experiments where the centromere is.
          * A centromere is defined as the largest area where the rows/columns
-           of the Hi-C matrix are empty.
+           of the 3C-like matrix are empty.
         """
         beg = end = 0
         size = xpr.size
         try:
-            hic = xpr.hic_data[0]
+            ccc = xpr.ccc_data[0]
         except TypeError:
             return
         # search for largest empty region of the chromosome
         best = (0, 0, 0)
         pos = 0
         for pos, raw in enumerate(xrange(0, size * size, size)):
-            if sum(hic[raw:raw + size]) == 0 and not beg:
+            if sum(ccc[raw:raw + size]) == 0 and not beg:
                 beg = float(pos)
-            if sum(hic[raw:raw + size]) != 0 and beg:
+            if sum(ccc[raw:raw + size]) != 0 and beg:
                 end = float(pos)
                 if (end - beg) > best[0]:
                     best = ((end - beg), beg, end)
                 beg = end = 0
-        # this is for weared cases where centromere is at the end of Hi-C data
+        # this is for weared cases where centromere is at the end of 3C data
         if beg and not end:
             end = float(pos)
             if (end - beg) > best[0]:

@@ -7,7 +7,6 @@
 from pytadbit.parsers.hic_parser         import read_matrix
 from pytadbit.utils.extraviews           import nicer
 from pytadbit.utils.tadmaths             import zscore
-from pytadbit.utils.hic_filtering        import hic_filtering_for_modelling
 from pytadbit.parsers.tad_parser         import parse_tads
 from warnings                            import warn
 from math                                import sqrt
@@ -26,7 +25,7 @@ class Experiment(object):
     :param name: name of the experiment
     :param resolution: the resolution of the experiment (size of a bin in
        bases)
-    :param None hic_data: whether a file or a list of lists corresponding to
+    :param None ccc_data: whether a file or a list of lists corresponding to
        the Hi-C data
     :param None tad_def: a file or a dict with precomputed TADs for this
        experiment
@@ -57,15 +56,15 @@ class Experiment(object):
     """
 
 
-    def __init__(self, name, resolution, hic_data=None, tad_def=None,
+    def __init__(self, name, resolution, ccc_data=None, tad_def=None,
                  parser=None, no_warn=False, weights=None,
                  conditions=None, filter_columns=True):
         self.name            = name
         self.resolution      = resolution
         self.crm             = None
         self._ori_resolution = resolution
-        self.hic_data        = None
-        self._ori_hic        = None
+        self.ccc_data        = None
+        self._ori_ccc        = None
         self._ori_size       = None
         self.conditions      = sorted(conditions) if conditions else []
         self.size            = None
@@ -74,12 +73,12 @@ class Experiment(object):
         self._normalization  = None
         self._zeros          = None
         self._zscores        = {}
-        if hic_data:
-            self.load_hic_data(hic_data, parser,
+        if ccc_data:
+            self.load_ccc_data(ccc_data, parser,
                                filter_columns=filter_columns)
         if tad_def:
             self.load_tad_def(tad_def, weights=weights)
-        elif not hic_data and not no_warn:
+        elif not ccc_data and not no_warn:
             warn('WARNING: this is an empty shell, no data here.\n')
 
 
@@ -103,8 +102,8 @@ class Experiment(object):
             
         xpr = Experiment(name='%s+%s' % (self.name, other.name),
                          resolution=resolution,
-                         hic_data=tuple([i + j for i, j in zip(
-                             self.hic_data[0], other.hic_data[0])]))
+                         ccc_data=tuple([i + j for i, j in zip(
+                             self.ccc_data[0], other.ccc_data[0])]))
         self.set_resolution(reso1)
         other.set_resolution(reso2)
         xpr.crm = self.crm
@@ -114,7 +113,7 @@ class Experiment(object):
     def set_resolution(self, resolution, keep_original=True):
         """
         Set a new value for the resolution. Copy the original data into
-        Experiment._ori_hic and replace the Experiment.hic_data
+        Experiment._ori_ccc and replace the Experiment.ccc_data
         with the data corresponding to new data 
         (:func:`pytadbit.Chromosome.compare_condition`).
 
@@ -132,18 +131,18 @@ class Experiment(object):
             return
         # if we want to go back to original resolution
         if resolution == self._ori_resolution:
-            self.hic_data   = self._ori_hic
+            self.ccc_data   = self._ori_ccc
             self.size       = self._ori_size
             self.resolution = self._ori_resolution
             return
         # if current resolution is the original one
         if self.resolution == self._ori_resolution:
-            self._ori_hic = self.hic_data[:]
+            self._ori_ccc = self.ccc_data[:]
         self.resolution = resolution
         fact = self.resolution / self._ori_resolution
         # super for!
-        size = int(sqrt(len(self._ori_hic[0])))
-        self.hic_data = [[]]
+        size = int(sqrt(len(self._ori_ccc[0])))
+        self.ccc_data = [[]]
         self.size     = size / fact
         rest = size % fact
         if rest:
@@ -157,20 +156,20 @@ class Experiment(object):
                     for l in  xrange(fact):
                         if j + l >= size:
                             break
-                        val += self._ori_hic[0][(i + k) * size + j + l]
-                self.hic_data[0].append(val)
-        # hic_data needs always to be stored as tuple
-        self.hic_data[0] = tuple(self.hic_data[0])
+                        val += self._ori_ccc[0][(i + k) * size + j + l]
+                self.ccc_data[0].append(val)
+        # ccc_data needs always to be stored as tuple
+        self.ccc_data[0] = tuple(self.ccc_data[0])
         if not keep_original:
-            del(self._ori_hic)
+            del(self._ori_ccc)
 
 
-    def load_hic_data(self, hic_data, parser=None, wanted_resolution=None,
+    def load_ccc_data(self, ccc_data, parser=None, wanted_resolution=None,
                       data_resolution=None, filter_columns=True, silent=False):
         """
         Add a Hi-C experiment to the Chromosome object.
         
-        :param None hic_data: whether a file or a list of lists corresponding to
+        :param None ccc_data: whether a file or a list of lists corresponding to
            the Hi-C data
         :param name: name of the experiment
         :param False force: overwrite the experiments loaded under the same 
@@ -198,17 +197,17 @@ class Experiment(object):
            of low values
         
         """
-        nums, size = read_matrix(hic_data, parser=parser)
-        self.hic_data = nums
+        nums, size = read_matrix(ccc_data, parser=parser)
+        self.ccc_data = nums
         self._ori_size       = self.size       = size
         self._ori_resolution = self.resolution = data_resolution or self._ori_resolution
         wanted_resolution = wanted_resolution or self.resolution
         self.set_resolution(wanted_resolution, keep_original=False)
         # self._zeros   = [int(pos) for pos, raw in enumerate(
         #     xrange(0, self.size**2, self.size))
-        #                  if sum(self.hic_data[0][raw:raw + self.size]) <= 100]
+        #                  if sum(self.ccc_data[0][raw:raw + self.size]) <= 100]
         if filter_columns:
-            self._zeros = hic_filtering_for_modelling(self.get_hic_matrix(),
+            self._zeros = ccc_filtering_for_modelling(self.get_ccc_matrix(),
                                                       silent=silent)
         
 
@@ -231,7 +230,7 @@ class Experiment(object):
             self._normalization = 'visibility'
         
 
-    def normalize_hic(self, silent=False):
+    def normalize_ccc(self, silent=False):
         """
         Normalize the Hi-C data. This normalization step does the same of
         the :func:`pytadbit.tadbit.tadbit` function (default parameters),
@@ -265,18 +264,18 @@ class Experiment(object):
         cases.
         """
 
-        if not self.hic_data:
+        if not self.ccc_data:
             raise Exception('ERROR: No Hi-C data loaded\n')
         if self.norm and not silent:
             warn('WARNING: removing previous weights\n')
         # removes columns where there is no data in the diagonal
         size_range = [i for i in xrange(self.size)
-                      if self.hic_data[0][i*self.size+i]]
+                      if self.ccc_data[0][i*self.size+i]]
         rowsums = [0 for _ in xrange(self.size)]
         for i in size_range:
             isi = i * self.size
             for j in size_range:
-                rowsums[i] += self.hic_data[0][isi + j]
+                rowsums[i] += self.ccc_data[0][isi + j]
         self.norm = [[0. for _ in xrange(self.size * self.size)]]
 
         total = sum(rowsums)
@@ -285,19 +284,19 @@ class Experiment(object):
             for j in size_range:
                 try:
                     self.norm[0][i * self.size + j] = (
-                        self.hic_data[0][i * self.size + j] / func(i, j))
+                        self.ccc_data[0][i * self.size + j] / func(i, j))
                 except ZeroDivisionError:
                     continue
         self._normalization = 'visibility'
 
 
-    def get_hic_zscores(self, normalized=True, zscored=True, remove_zeros=True):
+    def get_ccc_zscores(self, normalized=True, zscored=True, remove_zeros=True):
         """
         Normalize the Hi-C raw data. The result will be stored into
         the private Experiment._zscore list.
 
         :param True normalized: whether to normalize the result using the
-           weights (see :func:`normalize_hic`)
+           weights (see :func:`normalize_ccc`)
         :param True zscored: calculate the z-score of the data
         :param True remove_zeros: remove null interactions
         
@@ -313,8 +312,8 @@ class Experiment(object):
                 for j in xrange(i + 1, self.size):
                     if j in self._zeros:
                         continue
-                    if (not self.hic_data[0][i * self.size + j] 
-                        or not self.hic_data[0][i * self.size + j])\
+                    if (not self.ccc_data[0][i * self.size + j] 
+                        or not self.ccc_data[0][i * self.size + j])\
                         and remove_zeros:
                         zeros[(i, j)] = None
                         continue
@@ -326,7 +325,7 @@ class Experiment(object):
                 for j in xrange(i + 1, self.size):
                     if j in self._zeros:
                         continue
-                    values.append(self.hic_data[0][i * self.size + j])
+                    values.append(self.ccc_data[0][i * self.size + j])
         # compute Z-score
         if zscored:
             zscore(values, self.size)
@@ -408,7 +407,7 @@ class Experiment(object):
         """
         if self._normalization != 'visibility':
             warn('WARNING: normalizing according to visibility method')
-            self.normalize_hic()
+            self.normalize_ccc()
         zscores, values = self._sub_experiment_zscore(start, end)
         return generate_3d_models(zscores, self.resolution, values=values,
                                   n_models=n_models, outfile=outfile,
@@ -500,9 +499,9 @@ class Experiment(object):
         """
         if self._normalization != 'visibility':
             warn('WARNING: normalizing according to visibility method')
-            self.normalize_hic()
+            self.normalize_ccc()
         from pytadbit import Chromosome
-        matrix = self.get_hic_matrix()
+        matrix = self.get_ccc_matrix()
         end += 1
         new_matrix = [[] for _ in range(end-start)]
         for i in xrange(start, end):
@@ -510,7 +509,7 @@ class Experiment(object):
                 new_matrix[i - start].append(matrix[i][j])
                 
         tmp = Chromosome('tmp')
-        tmp.add_experiment('exp1', hic_data=[new_matrix],
+        tmp.add_experiment('exp1', ccc_data=[new_matrix],
                            resolution=self.resolution, filter_columns=False)
         exp = tmp.experiments[0]
         # We want the weights and zeros calculated in the full chromosome
@@ -522,7 +521,7 @@ class Experiment(object):
         if len(exp._zeros) == (end + 1 - start):
             raise Exception('ERROR: no interaction found in selected regions')
         # ... but the z-scores in this particular region
-        exp.get_hic_zscores(remove_zeros=True)
+        exp.get_ccc_zscores(remove_zeros=True)
         values = [[float('nan') for _ in xrange(exp.size)]
                   for _ in xrange(exp.size)]
         for i in xrange(exp.size):
@@ -532,8 +531,8 @@ class Experiment(object):
             for j in xrange(i + 1, exp.size):
                 if j in exp._zeros:
                     continue
-                if (not exp.hic_data[0][i * exp.size + j] 
-                    or not exp.hic_data[0][i * exp.size + j]):
+                if (not exp.ccc_data[0][i * exp.size + j] 
+                    or not exp.ccc_data[0][i * exp.size + j]):
                     continue
                 values[i][j] = exp.norm[0][i * exp.size + j]
                 values[j][i] = exp.norm[0][i * exp.size + j]
@@ -563,7 +562,7 @@ class Experiment(object):
             for i in xrange(self.size):
                 for j in xrange(self.size):
                     self._zscores.setdefault(str(i), {})
-                    self._zscores[str(i)][str(j)] = self.hic_data[0][i * self.size + j]
+                    self._zscores[str(i)][str(j)] = self.ccc_data[0][i * self.size + j]
         if not self.norm:
             raise Exception('Experiment not normalized.')
         # write to file
@@ -597,7 +596,7 @@ class Experiment(object):
                 elif normalized:
                     val = self.norm[0][self.size*i+j]
                 else:
-                    val = self.hic_data[0][self.size*i+j]
+                    val = self.ccc_data[0][self.size*i+j]
                 if remove_zeros and not val:
                     continue
                 if true_position:
@@ -608,7 +607,7 @@ class Experiment(object):
         out.close()
 
 
-    def get_hic_matrix(self, focus=None):
+    def get_ccc_matrix(self, focus=None):
         """
         Return the Hi-C matrix.
 
@@ -619,18 +618,18 @@ class Experiment(object):
            current experiment
         """
         siz = self.size
-        hic = self.hic_data[0]
+        ccc = self.ccc_data[0]
         if focus:
             start, end = focus
             start -= 1
         else:
             start = 0
             end   = siz
-        return [[hic[i + siz * j] for i in xrange(start, end)]
+        return [[ccc[i + siz * j] for i in xrange(start, end)]
                 for j in xrange(start, end)]
 
 
-    def print_hic_matrix(self, print_it=True):
+    def print_ccc_matrix(self, print_it=True):
         """
         Return the Hi-C matrix as string
 
@@ -638,8 +637,8 @@ class Experiment(object):
            current experiment
         """
         siz = self.size
-        hic = self.hic_data[0]
-        out = '\n'.join(['\t'.join([str(hic[i+siz * j]) \
+        ccc = self.ccc_data[0]
+        out = '\n'.join(['\t'.join([str(ccc[i+siz * j]) \
                                     for i in xrange(siz)]) \
                          for j in xrange(siz)])
         if print_it:
